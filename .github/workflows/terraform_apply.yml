@@ -8,11 +8,6 @@ on:
         type: string
         required: true
         default: 'main'
-      cloudlab_project:
-        description: 'CloudLab project to deploy to'
-        type: string
-        required: true
-        default: 'cloud-edu'
       image_tag:
         description: 'GHCR image tag to run (e.g., v1.2.3 or latest)'
         type: string
@@ -95,14 +90,10 @@ jobs:
         run: terraform validate
 
       - name: Terraform Plan
-        env:
-          CLOUDLAB_PROJECT: ${{ github.event.inputs.cloudlab_project }}
         run: terraform plan -out=tfplan -input=false
 
       - name: Terraform Apply (main only)
         if: github.ref == 'refs/heads/main'
-        env:
-          CLOUDLAB_PROJECT: ${{ github.event.inputs.cloudlab_project }}
         run: terraform apply -input=false -auto-approve tfplan
 
       - name: Teardown API container
