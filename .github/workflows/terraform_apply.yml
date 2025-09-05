@@ -1,51 +1,87 @@
-# setup terraform environment and run terraform apply to deploy infrastructure using CloudLab API - uses the reusable setup workflow from terraform-provider-cloudlab-api repository
 name: Terraform Apply CloudLab API
 
-on: 
-    workflow_dispatch:
-        inputs:
-            branch: 
-                description: 'Infra branch to deploy from'
-                type: string
-                required: true
-                default: 'main'
-            cloudlab_project:
-                description: 'CloudLab project to deploy to'
-                type: string
-                required: true
-                default: 'cloud-edu'
-            
-jobs:
-  setup_api:
-    name: Setup CloudLab API
-    uses: ./.github/workflows/setup_api.yml
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Infra branch to deploy from'
+        type: string
+        required: true
+        default: 'main'
+      cloudlab_project:
+        description: 'CloudLab project to deploy to'
+        type: string
+        required: true
+        default: 'cloud-edu'
+      image_tag:
+        description: 'GHCR image tag to run (e.g., v1.2.3 or latest)'
+        type: string
+        required: true
+        default: 'latest'
 
+permissions:
+  contents: read
+  packages: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_BASENAME: cloudlab-terraform-api
+  API_PORT: "8080"
+  API_HOST: "localhost"
+
+jobs:
   terraform:
-    name: Terraform Plan & Apply
-    needs: setup_api
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: infra
+
     steps:
       - name: Checkout infra repo
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.branch }}
 
-      - name: Show API endpoint (debug)
+      - name: Compute image URL
+        id: vars
         run: |
-          echo "API Base URL: ${{ needs.setup_api.outputs.base_url }}"
-          echo "API Port: ${{ needs.setup_api.outputs.port }}"
+          owner_lc=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
+          echo "owner_lc=$owner_lc" >> $GITHUB_OUTPUT
+          echo "image=${{ env.REGISTRY }}/${owner_lc}/${{ env.IMAGE_BASENAME }}:${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
 
-      - name: Write credentials PEM from base64 secret
+      - name: Login to GHCR (for private images)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull image
+        run: docker pull "${{ steps.vars.outputs.image }}"
+
+      - name: Start CloudLab API container
         run: |
           set -euo pipefail
-          echo "${CLOUDLAB_PEM_B64}" | base64 -d > cloudlab_decrypted.pem
-          chmod 600 cloudlab_decrypted.pem
-          head -n1 cloudlab_decrypted.pem | grep -q '-----BEGIN ' || { echo "PEM decode failed"; exit 1; }
-        env:
-          CLOUDLAB_PEM_B64: ${{ secrets.CLOUDLAB_PEM_B64 }}
+          docker rm -f cloudlab_api >/dev/null 2>&1 || true
+          docker run -d --name cloudlab_api \
+            -p ${{ env.API_PORT }}:8080 \
+            "${{ steps.vars.outputs.image }}"
+          echo "Container started: $(docker ps --filter name=cloudlab_api --format '{{.ID}} {{.Image}} {{.Ports}}')"
+
+      - name: Wait for API /health
+        run: |
+          set -euo pipefail
+          for i in {1..60}; do
+            if curl -fsS "http://${{ env.API_HOST }}:${{ env.API_PORT }}/health" >/dev/null; then
+              echo "API is healthy."
+              exit 0
+            fi
+            echo "Waiting for API... ($i)"
+            sleep 2
+          done
+          echo "API failed to become healthy in time"
+          docker logs cloudlab_api || true
+          exit 1
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -59,12 +95,16 @@ jobs:
         run: terraform validate
 
       - name: Terraform Plan
-        run: terraform plan -out=tfplan -input=false
         env:
           CLOUDLAB_PROJECT: ${{ github.event.inputs.cloudlab_project }}
+        run: terraform plan -out=tfplan -input=false
 
       - name: Terraform Apply (main only)
         if: github.ref == 'refs/heads/main'
-        run: terraform apply -input=false -auto-approve tfplan
         env:
           CLOUDLAB_PROJECT: ${{ github.event.inputs.cloudlab_project }}
+        run: terraform apply -input=false -auto-approve tfplan
+
+      - name: Teardown API container
+        if: always()
+        run: docker rm -f cloudlab_api || true
