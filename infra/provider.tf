@@ -8,6 +8,7 @@ terraform {
 }
 
 provider "cloudlab" {
+  project = "cloud-edu"
   credentials_path = "./cloudlab_decrypted.pem"
 }
 
