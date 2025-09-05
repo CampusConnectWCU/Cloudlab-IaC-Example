@@ -85,7 +85,7 @@ jobs:
           chmod 600 cloudlab_decrypted.pem
           head -n1 cloudlab_decrypted.pem | grep -q -- 'BEGIN' || { echo "PEM decode failed"; exit 1; }
         env:
-            CLOUDLAB_PEM_B64: ${{ secrets.CLOUDLAB_PEM_B64 }}
+          CLOUDLAB_PEM_B64: ${{ secrets.CLOUDLAB_PEM_B64 }}
             
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
