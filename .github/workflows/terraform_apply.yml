@@ -78,6 +78,15 @@ jobs:
           docker logs cloudlab_api || true
           exit 1
 
+      - name: Write credentials PEM from base64 secret
+        run: |
+          set -euo pipefail
+          echo "${CLOUDLAB_PEM_B64}" | base64 -d > cloudlab_decrypted.pem
+          chmod 600 cloudlab_decrypted.pem
+          head -n1 cloudlab_decrypted.pem | grep -q '-----BEGIN ' || { echo "PEM decode failed"; exit 1; }
+        env:
+            CLOUDLAB_PEM_B64: ${{ secrets.CLOUDLAB_PEM_B64 }}
+            
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
