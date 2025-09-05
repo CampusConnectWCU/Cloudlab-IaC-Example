@@ -1,0 +1,70 @@
+# setup terraform environment and run terraform apply to deploy infrastructure using CloudLab API - uses the reusable setup workflow from terraform-provider-cloudlab-api repository
+name: Terraform Apply CloudLab API
+
+on: 
+    workflow_dispatch:
+        inputs:
+            branch: 
+                description: 'Infra branch to deploy from'
+                type: string
+                required: true
+                default: 'main'
+            cloudlab_project:
+                description: 'CloudLab project to deploy to'
+                type: string
+                required: true
+                default: 'cloud-edu'
+            
+jobs:
+  setup_api:
+    name: Setup CloudLab API
+    uses: ./.github/workflows/setup_api.yml
+
+  terraform:
+    name: Terraform Plan & Apply
+    needs: setup_api
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - name: Checkout infra repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: Show API endpoint (debug)
+        run: |
+          echo "API Base URL: ${{ needs.setup_api.outputs.base_url }}"
+          echo "API Port: ${{ needs.setup_api.outputs.port }}"
+
+      - name: Write credentials PEM from base64 secret
+        run: |
+          set -euo pipefail
+          echo "${CLOUDLAB_PEM_B64}" | base64 -d > cloudlab_decrypted.pem
+          chmod 600 cloudlab_decrypted.pem
+          head -n1 cloudlab_decrypted.pem | grep -q '-----BEGIN ' || { echo "PEM decode failed"; exit 1; }
+        env:
+          CLOUDLAB_PEM_B64: ${{ secrets.CLOUDLAB_PEM_B64 }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan -input=false
+        env:
+          CLOUDLAB_PROJECT: ${{ github.event.inputs.cloudlab_project }}
+
+      - name: Terraform Apply (main only)
+        if: github.ref == 'refs/heads/main'
+        run: terraform apply -input=false -auto-approve tfplan
+        env:
+          CLOUDLAB_PROJECT: ${{ github.event.inputs.cloudlab_project }}
