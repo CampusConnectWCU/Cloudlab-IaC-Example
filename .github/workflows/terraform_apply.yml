@@ -83,7 +83,7 @@ jobs:
           set -euo pipefail
           echo "${CLOUDLAB_PEM_B64}" | base64 -d > cloudlab_decrypted.pem
           chmod 600 cloudlab_decrypted.pem
-          head -n1 cloudlab_decrypted.pem | grep -q '-----BEGIN ' || { echo "PEM decode failed"; exit 1; }
+          head -n1 cloudlab_decrypted.pem | grep -q -- 'BEGIN' || { echo "PEM decode failed"; exit 1; }
         env:
             CLOUDLAB_PEM_B64: ${{ secrets.CLOUDLAB_PEM_B64 }}
             
