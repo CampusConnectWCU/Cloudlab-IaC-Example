@@ -13,7 +13,19 @@ on:
         type: string
         required: true
         default: 'latest'
-
+      aggregate:                       # <— NEW
+        description: 'CloudLab aggregate/site'
+        type: choice
+        required: true
+        options:
+          - emulab.net
+          - utah.cloudlab.us
+          - clemson.cloudlab.us
+          - wisc.cloudlab.us
+          - apt.emulab.net
+          - Any
+        default: clemson.cloudlab.us
+        
 permissions:
   contents: read
   packages: read
@@ -96,14 +108,14 @@ jobs:
         run: terraform init -input=false
 
       - name: Terraform Validate
-        run: terraform validate
+        run: terraform validate -var "aggregate=${{ github.event.inputs.aggregate }}"
 
       - name: Terraform Plan
-        run: terraform plan -out=tfplan -input=false
+        run: terraform plan -out=tfplan -input=false -var "aggregate=${{ github.event.inputs.aggregate }}"
 
       - name: Terraform Apply (main only)
         if: github.ref == 'refs/heads/main'
-        run: terraform apply -input=false -auto-approve tfplan
+        run: terraform apply -input=false -auto-approve tfplan -var "aggregate=${{ github.event.inputs.aggregate }}"
 
       - name: Teardown API container
         if: always()
