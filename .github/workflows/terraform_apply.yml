@@ -108,7 +108,7 @@ jobs:
         run: terraform init -input=false
 
       - name: Terraform Validate
-        run: terraform validate -var "aggregate=${{ github.event.inputs.aggregate }}"
+        run: terraform validate
 
       - name: Terraform Plan
         run: terraform plan -out=tfplan -input=false -var "aggregate=${{ github.event.inputs.aggregate }}"
