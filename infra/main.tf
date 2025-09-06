@@ -1,4 +1,4 @@
-resource "cloudlab_vm" "my-cloudlab-vm" {
+resource "cloudlab_vm" "my_cloudlab_vm" {
   name         = "vm-name"
   aggregate    = "clemson.cloudlab.us"
   image        = "UBUNTU 18.04"
@@ -10,4 +10,8 @@ resource "cloudlab_vm" "my-cloudlab-vm" {
       subnet_mask = "255.255.255.0"
     }
   ]
+}
+
+output "experiment_uuid" {
+  value = cloudlab_vm.my_cloudlab_vm.uuid
 }
